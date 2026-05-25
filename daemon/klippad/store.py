@@ -143,6 +143,10 @@ class Store:
     def get(self, entry_id: int) -> Entry | None:
         return self._by_id.get(entry_id)
 
+    def find(self, kind: str, data: bytes) -> Entry | None:
+        """Найти запись по содержимому (для отличия дедупа от новой записи)."""
+        return self._by_hash.get(_content_hash(kind, data))
+
     def __len__(self) -> int:
         return len(self._entries)
 
