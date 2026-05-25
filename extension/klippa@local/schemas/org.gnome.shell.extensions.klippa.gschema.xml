@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+  <schema id="org.gnome.shell.extensions.klippa"
+          path="/org/gnome/shell/extensions/klippa/">
+
+    <key name="hotkey" type="as">
+      <default><![CDATA[['<Super>v']]]></default>
+      <summary>Горячая клавиша вызова меню</summary>
+      <description>
+        Комбинация для открытия popup. Источник истины — config.toml демона,
+        который синхронизирует значение сюда (DMN-010). Формат — GTK-акселератор.
+      </description>
+    </key>
+
+    <key name="popup-limit" type="i">
+      <default>50</default>
+      <range min="1" max="500"/>
+      <summary>Сколько записей показывать в меню</summary>
+    </key>
+
+    <key name="auto-paste" type="b">
+      <default>true</default>
+      <summary>Автоматически вставлять выбранное (Ctrl+V) в прежнее окно</summary>
+      <description>
+        Синхронизируется из config.toml демона (DMN-010). При false выбранное
+        лишь кладётся в буфер.
+      </description>
+    </key>
+
+  </schema>
+</schemalist>
