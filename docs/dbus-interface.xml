@@ -1,0 +1,60 @@
+<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
+ "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<!--
+  Контракт D-Bus klippa (канонический источник истины — IPC-001).
+  Шина: session.  Имя: org.klippa.Daemon.  Объект: /org/klippa/Daemon.
+  Семантику полей см. в docs/dbus-interface.md.
+-->
+<node>
+  <interface name="org.klippa.Daemon1">
+
+    <!-- Новая запись от расширения. kind ∈ {"text","image"}.
+         Для text: data — UTF-8 байты. Для image: data — PNG-байты.
+         sensitive=true → пометка менеджера паролей (демон отбросит при skip_secrets). -->
+    <method name="Capture">
+      <arg name="kind"       type="s"  direction="in"/>
+      <arg name="data"       type="ay" direction="in"/>
+      <arg name="source_app" type="s"  direction="in"/>
+      <arg name="ts"         type="x"  direction="in"/>
+      <arg name="sensitive"  type="b"  direction="in"/>
+    </method>
+
+    <!-- Метаданные последних записей в виде JSON-строки.
+         json = [{ "id": u64, "kind": "text"|"image",
+                   "preview": str, "has_image": bool, "ts": i64 }], новейшая первой. -->
+    <method name="GetHistory">
+      <arg name="limit" type="u" direction="in"/>
+      <arg name="json"  type="s" direction="out"/>
+    </method>
+
+    <!-- Миниатюра PNG для image-записи (ленивая загрузка, только в памяти). -->
+    <method name="GetThumbnail">
+      <arg name="id"  type="t"  direction="in"/>
+      <arg name="png" type="ay" direction="out"/>
+    </method>
+
+    <!-- Полное содержимое записи для вставки. -->
+    <method name="GetContent">
+      <arg name="id"   type="t"  direction="in"/>
+      <arg name="kind" type="s"  direction="out"/>
+      <arg name="data" type="ay" direction="out"/>
+    </method>
+
+    <!-- Поднять запись в начало (MRU) при выборе. -->
+    <method name="Promote">
+      <arg name="id" type="t" direction="in"/>
+    </method>
+
+    <!-- Удалить одну запись. -->
+    <method name="Delete">
+      <arg name="id" type="t" direction="in"/>
+    </method>
+
+    <!-- Очистить всю историю (память + БД). -->
+    <method name="Clear"/>
+
+    <!-- Эмитится при любой мутации истории; открытый popup перечитывает GetHistory. -->
+    <signal name="HistoryChanged"/>
+
+  </interface>
+</node>
