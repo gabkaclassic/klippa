@@ -1,0 +1,32 @@
+[project]
+name = "klippad"
+version = "0.1.0"
+description = "Демон менеджера буфера обмена klippa (D-Bus org.klippa.Daemon)"
+requires-python = ">=3.11"
+# Системные GI-библиотеки (gi.Gio/GLib/GdkPixbuf/Secret) НЕ ставятся через pip —
+# их даёт дистрибутив. См. требования ниже. Через pip управляем только crypto.
+dependencies = [
+    "cryptography>=42",
+]
+
+[project.scripts]
+klippad = "klippad.__main__:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["klippad*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+# --- Системные зависимости (устанавливаются пакетным менеджером дистрибутива) ---
+# Ubuntu/Debian:
+#   sudo apt install python3-gi gir1.2-glib-2.0 gir1.2-gdkpixbuf-2.0 \
+#                    gir1.2-secret-1 python3-cryptography
+# Демон запускается системным python3 (с доступом к gi); pip нужен лишь
+# для cryptography, если её нет в системе.
