@@ -13,20 +13,38 @@ DAEMON_DST="${XDG_DATA_HOME:-$HOME/.local/share}/klippa/klippad"
 UNIT_SRC="$REPO_ROOT/packaging/klippad.service"
 UNIT_DST="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user/klippad.service"
 
-echo "==> Проверка зависимостей"
+# Демон работает под интерпретатором из ExecStart юнита (единый источник истины),
+# поэтому и зависимости проверяем ИМ ЖЕ, а не тем python3, что сейчас в PATH.
+# Иначе активный venv (без --system-site-packages) не видит системный python3-gi
+# и проверка ложно сообщает о нехватке уже установленных пакетов.
+DAEMON_PYTHON="$(sed -n 's/^ExecStart=\([^ ]*\).*/\1/p' "$UNIT_SRC")"
+DAEMON_PYTHON="${DAEMON_PYTHON:-/usr/bin/python3}"
+
+echo "==> Проверка зависимостей (интерпретатор демона: $DAEMON_PYTHON)"
+if [ -n "${VIRTUAL_ENV:-}" ]; then
+  echo "   (активен venv $VIRTUAL_ENV — он намеренно игнорируется: демон"
+  echo "    запускается системным python из юнита, а не из venv)"
+fi
+if [ ! -x "$DAEMON_PYTHON" ]; then
+  echo "!! Интерпретатор $DAEMON_PYTHON не найден. Поправьте ExecStart в $UNIT_SRC."
+  exit 1
+fi
+
 missing=()
-python3 -c "import gi" 2>/dev/null || missing+=("python3-gi")
-python3 -c "import cryptography" 2>/dev/null || missing+=("python3-cryptography")
+"$DAEMON_PYTHON" -c "import gi" 2>/dev/null || missing+=("python3-gi")
+"$DAEMON_PYTHON" -c "import cryptography" 2>/dev/null || missing+=("python3-cryptography")
 for ns in "Gio:2.0" "GLib:2.0" "GdkPixbuf:2.0" "Secret:1"; do
-  python3 - "$ns" <<'PY' 2>/dev/null || missing+=("typelib:${ns}")
+  "$DAEMON_PYTHON" - "$ns" <<'PY' 2>/dev/null || missing+=("typelib:${ns}")
 import sys, gi
 n, v = sys.argv[1].split(":")
 gi.require_version(n, v)
 PY
 done
 if [ ${#missing[@]} -gt 0 ]; then
-  echo "!! Не хватает: ${missing[*]}"
+  echo "!! В $DAEMON_PYTHON не хватает: ${missing[*]}"
   echo "   Ubuntu: sudo apt install python3-gi gir1.2-glib-2.0 gir1.2-gdkpixbuf-2.0 gir1.2-secret-1 python3-cryptography"
+  echo "   Если пакеты уже стоят системно, а ошибка осталась — значит проверяется"
+  echo "   не системный python. Убедитесь, что $DAEMON_PYTHON это /usr/bin/python3."
   exit 1
 fi
 
