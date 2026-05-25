@@ -1,0 +1,31 @@
+# Планировочные документы — не коммитим (см. PRD §9.2)
+PRD.md
+tasks.json
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# Локальные данные/секреты времени выполнения (на всякий случай — реальные пути в XDG)
+*.db
+*.key
+data/
+secrets/
+
+# Скомпилированные схемы GSettings
+extension/klippa@local/schemas/gschemas.compiled
+
+# Редакторы / ОС
+.idea/
+.vscode/
+*.swp
+.DS_Store
