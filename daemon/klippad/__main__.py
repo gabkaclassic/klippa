@@ -18,7 +18,7 @@ from gi.repository import GLib  # noqa: E402
 from .config import ConfigWatcher, default_config_path, ensure_config_file, load_config
 from .crypto import make_cipher_from_keyring
 from .db import Database, default_db_path
-from .service import Daemon, push_hotkey_to_extension
+from .service import Daemon, push_settings_to_extension
 from .store import Store
 
 _EXPIRY_INTERVAL_SEC = 3600
@@ -41,7 +41,7 @@ def main() -> int:
     db.sync(store.list())  # согласовать БД, если загрузка что-то вытеснила
 
     daemon = Daemon(cfg, store, db)
-    push_hotkey_to_extension(cfg.hotkey)  # best-effort: расширение может быть ещё не установлено
+    push_settings_to_extension(cfg)  # best-effort: расширение может быть ещё не установлено
     daemon.start()
 
     watcher = ConfigWatcher(cfg_path, daemon.apply_config)

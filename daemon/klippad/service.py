@@ -68,17 +68,24 @@ def _as_bytes(value) -> bytes:
     return bytes(value)
 
 
-def push_hotkey_to_extension(accel: str) -> bool:
-    """Записать хоткей в GSettings расширения (DMN-010). Без падения, если схемы нет."""
-    if not accel or not accel.strip():
-        print("klippad: пустой hotkey — не записываю", flush=True)
+def push_settings_to_extension(cfg: Config) -> bool:
+    """Синхронизировать настройки в GSettings расширения (DMN-010).
+
+    config.toml демона — единственный источник истины; сюда зеркалятся хоткей,
+    лимит показа и авто-вставка. Без падения, если схема ещё не установлена.
+    """
+    accel = (cfg.hotkey or "").strip()
+    if not accel:
+        print("klippad: пустой hotkey — не синхронизирую", flush=True)
         return False
     source = Gio.SettingsSchemaSource.get_default()
     if source is None or source.lookup(EXT_SCHEMA, True) is None:
-        # расширение ещё не установлено — это нормально на раннем этапе
+        # расширение ещё не установлено — нормально на раннем этапе
         return False
     settings = Gio.Settings.new(EXT_SCHEMA)
     settings.set_strv(EXT_HOTKEY_KEY, [accel])
+    settings.set_int("popup-limit", cfg.max_entries)
+    settings.set_boolean("auto-paste", cfg.auto_paste)
     return True
 
 
@@ -127,15 +134,13 @@ class Daemon:
 
     def apply_config(self, cfg: Config) -> None:
         """Вызывается ConfigWatcher при изменении config.toml."""
-        old_hotkey = self._cfg.hotkey
         self._cfg = cfg
         evicted = self._store.set_max_entries(cfg.max_entries)
         for entry_id in evicted:
             self._thumbs.pop(entry_id, None)
         if evicted:
             self._db.sync(self._store.list())
-        if cfg.hotkey != old_hotkey:
-            push_hotkey_to_extension(cfg.hotkey)
+        push_settings_to_extension(cfg)
         self._emit_changed()
 
     # --- диспетчер D-Bus ----------------------------------------------------
