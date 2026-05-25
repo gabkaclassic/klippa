@@ -25,11 +25,17 @@ echo "==> Удаление файлов демона"
 rm -rf "$DAEMON_DST/klippad"
 
 if [ "$PURGE" = "1" ]; then
-  echo "==> --purge: удаляю историю, конфиг и предлагаю снять ключ из keyring"
+  echo "==> --purge: удаляю историю, конфиг и ключ из keyring"
   rm -rf "$DAEMON_DST"
   rm -rf "$CONFIG_DIR"
-  echo "    Ключ шифрования остаётся в gnome-keyring; снять вручную:"
-  echo "      secret-tool clear app klippa purpose history-encryption"
+  if command -v secret-tool >/dev/null 2>&1; then
+    secret-tool clear app klippa purpose history-encryption 2>/dev/null \
+      && echo "    ключ шифрования снят из gnome-keyring" \
+      || echo "    ключа в keyring не найдено (уже снят?)"
+  else
+    echo "    secret-tool не найден; снять ключ вручную позже:"
+    echo "      secret-tool clear app klippa purpose history-encryption"
+  fi
 else
   echo "==> Данные сохранены ($DAEMON_DST, $CONFIG_DIR). Полное удаление: --purge"
 fi
