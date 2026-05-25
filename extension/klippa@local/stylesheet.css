@@ -1,0 +1,61 @@
+/* Стили popup klippa. Минимализм, поддержка светлой/тёмной темы через
+   полупрозрачные цвета поверх системного фона. */
+
+.klippa-popup {
+    background-color: rgba(30, 30, 32, 0.96);
+    color: #ffffff;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 12px;
+    padding: 8px;
+    spacing: 6px;
+    min-width: 320px;
+    max-width: 640px;
+    box-shadow: 0 6px 24px 4px rgba(0, 0, 0, 0.45);
+}
+
+.klippa-hint {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.55);
+    padding: 2px 6px 6px 6px;
+}
+
+.klippa-scroll {
+    max-height: 520px;
+}
+
+.klippa-list {
+    spacing: 2px;
+}
+
+.klippa-row {
+    padding: 6px 8px;
+    border-radius: 8px;
+    spacing: 10px;
+}
+
+.klippa-row:hover {
+    background-color: rgba(255, 255, 255, 0.06);
+}
+
+.klippa-selected {
+    background-color: rgba(120, 160, 255, 0.28);
+}
+
+.klippa-index {
+    color: rgba(255, 255, 255, 0.4);
+    font-size: 11px;
+    min-width: 18px;
+}
+
+.klippa-text {
+    font-size: 13px;
+}
+
+.klippa-thumb {
+    border-radius: 6px;
+}
+
+.klippa-empty {
+    color: rgba(255, 255, 255, 0.5);
+    padding: 12px;
+}
