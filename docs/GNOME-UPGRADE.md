@@ -41,6 +41,8 @@ journalctl --user -u klippad -b 0            # демон поднялся
 | `popup.js` | `Clutter` virtual device: `get_default_seat().create_virtual_device`, `notify_keyval`, `Clutter.KeyState` | сигнатуры синтеза ввода |
 | `extension.js` | `Main.wm.addKeybinding`/`removeKeybinding`, `Shell.ActionMode`, `Meta.KeyBindingFlags` | флаги, режимы |
 | `extension.js` | базовый класс `Extension` из `resource:///org/gnome/shell/extensions/extension.js`, ESM-импорты `gi://`, `getSettings()` | формат загрузки модулей расширения |
+| `prefs.js` | `ExtensionPreferences` из `resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js`, `Adw.PreferencesPage/Group`, `Adw.SpinRow`, `Adw.SwitchRow` | libadwaita-мажор (Gtk4/Adw1), наличие строк-виджетов |
+| `prefs.js` | `Gtk.EventControllerKey` (`key-pressed`), `Gtk.accelerator_name/parse/get_label`, `Gtk.accelerator_get_default_mod_mask`, `Gdk.KEY_*` | API захвата комбинации клавиш |
 | весь модуль | формат `metadata.json` (`shell-version`, `settings-schema`) | требования к полям |
 
 Логи ошибок расширения: `journalctl /usr/bin/gnome-shell -b 0`.

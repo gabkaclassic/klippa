@@ -94,6 +94,20 @@ systemctl --user status klippad         # active (running)
 
 По умолчанию хоткей — `<Super>v`.
 
+### Zip-бандл расширения (опционально)
+
+Для версионирования/реинстолла только расширения:
+
+```bash
+./packaging/bump-version.sh        # +1 к version в metadata.json (или указать число)
+./packaging/pack.sh                # dist/klippa@local.shell-extension.zip
+gnome-extensions install --force dist/klippa@local.shell-extension.zip
+```
+
+`pack.sh` кладёт в бандл все JS-модули (`--extra-source`) и схему; компилирует её
+сам `gnome-extensions install`. Демон ставится отдельно (`install.sh`). На Wayland
+после установки нужен перелогин.
+
 ## Удаление
 
 Из корня репозитория:
@@ -110,9 +124,17 @@ systemctl --user status klippad         # active (running)
 
 ## Конфигурация
 
-Файл `~/.config/klippa/config.toml` создаётся при первом старте. Демон следит за ним
-и применяет изменения на лету; хоткей/лимит/авто-вставка зеркалятся в настройки
-расширения автоматически.
+Два пути правки: GUI или файл — оба пишут один и тот же конфиг демона.
+
+**GUI:** `gnome-extensions prefs klippa@local` (или из приложения «Расширения»).
+Страница настроек читает/пишет конфиг демона по D-Bus (`GetConfig`/`SetConfig`);
+демон сохраняет `config.toml` и применяет на лету. Хоткей задаётся захватом
+комбинации. Если демон не запущен, страница это покажет.
+
+**Файл:** `~/.config/klippa/config.toml` создаётся при первом старте. Демон следит
+за ним (`Gio.FileMonitor`) и применяет изменения на лету. Хоткей/лимит/авто-вставка
+зеркалятся в GSettings расширения автоматически (демон грузит схему расширения из
+его каталога — поэтому смена хоткея доходит до перепривязки клавиши).
 
 | Ключ | Тип | Дефолт | Назначение |
 |---|---|---|---|
@@ -169,9 +191,11 @@ extension/klippa@local/
   clipboard.js   захват буфера (Meta.Selection + St.Clipboard)
   popup.js       меню у курсора: навигация, фильтр, миниатюры, авто-вставка
   extension.js   хоткей + жизненный цикл
+  prefs.js       GUI-настройки (Adw/Gtk4), пишет конфиг демона по D-Bus
   stylesheet.css стили popup
 
-packaging/   klippad.service, install.sh, uninstall.sh, gnome-upgrade.sh
+packaging/   klippad.service, install.sh, uninstall.sh, gnome-upgrade.sh,
+             pack.sh (zip-бандл), bump-version.sh
 docs/        этот файл, контракт D-Bus, GNOME-UPGRADE.md, smoke-checklist.md
 ```
 
