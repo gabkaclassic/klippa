@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import tomllib
 from dataclasses import asdict, dataclass
@@ -65,16 +66,11 @@ def default_config_path() -> Path:
     return Path(base) / APP / "config.toml"
 
 
-def parse_config(data: str) -> Config:
-    """Разобрать TOML-строку в Config. Неизвестные ключи игнорируются.
+def from_dict(raw: dict) -> Config:
+    """Собрать Config из словаря (TOML или JSON по D-Bus). Неизвестные ключи игнорируются.
 
-    Поднимает ConfigError при битом TOML или неверном типе известного ключа.
+    Поднимает ConfigError при неверном типе известного ключа.
     """
-    try:
-        raw = tomllib.loads(data)
-    except tomllib.TOMLDecodeError as exc:
-        raise ConfigError(f"битый TOML: {exc}") from exc
-
     cfg = Config()
     for key, value in raw.items():
         if key not in _SCHEMA:
@@ -91,6 +87,18 @@ def parse_config(data: str) -> Config:
 
     _clamp(cfg)
     return cfg
+
+
+def parse_config(data: str) -> Config:
+    """Разобрать TOML-строку в Config. Неизвестные ключи игнорируются.
+
+    Поднимает ConfigError при битом TOML или неверном типе известного ключа.
+    """
+    try:
+        raw = tomllib.loads(data)
+    except tomllib.TOMLDecodeError as exc:
+        raise ConfigError(f"битый TOML: {exc}") from exc
+    return from_dict(raw)
 
 
 def _clamp(cfg: Config) -> None:
@@ -123,6 +131,48 @@ def ensure_config_file(path: Path | None = None) -> Path:
 
 def as_dict(cfg: Config) -> dict:
     return asdict(cfg)
+
+
+def dump_toml(cfg: Config) -> str:
+    """Сериализовать Config в комментированный TOML (как DEFAULT_TOML, но со значениями).
+
+    Используется при записи конфига из prefs.js (через D-Bus SetConfig): файл
+    остаётся человекочитаемым, с пояснениями. Парсится обратно в тот же Config.
+    """
+
+    def s(value: str) -> str:  # basic-строка TOML == JSON-строка для наших значений
+        return json.dumps(value, ensure_ascii=False)
+
+    def b(value: bool) -> str:
+        return "true" if value else "false"
+
+    return (
+        "# Конфигурация klippa. Меняется на лету (демон следит за файлом).\n"
+        "\n"
+        f"hotkey         = {s(cfg.hotkey)}   # любая комбинация, например \"<Ctrl><Alt>v\"\n"
+        f"max_entries    = {cfg.max_entries}           # сколько последних записей хранить\n"
+        f"capture_images = {b(cfg.capture_images)}         # ловить изображения и скриншоты из буфера\n"
+        f"max_image_mb   = {cfg.max_image_mb}           # картинки крупнее этого — игнорировать\n"
+        f"auto_paste     = {b(cfg.auto_paste)}         # вставлять выбранное Ctrl+V автоматически\n"
+        f"skip_secrets   = {b(cfg.skip_secrets)}         # пропускать помеченное менеджерами паролей\n"
+        f"expire_days    = {cfg.expire_days}            # удалять записи старше N дней (0 — не удалять)\n"
+    )
+
+
+def save_config(cfg: Config, path: Path | None = None) -> Path:
+    """Атомарно записать конфиг (temp + rename), права 0600. Каталог — 0700.
+
+    Атомарность важна: частично записанный файл при чтении на старте дал бы
+    ConfigError. rename меняет inode, поэтому ConfigWatcher свою же запись может
+    не увидеть — вызывающий (SetConfig) применяет конфиг напрямую.
+    """
+    path = path or default_config_path()
+    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(dump_toml(cfg), encoding="utf-8")
+    tmp.chmod(0o600)
+    os.replace(tmp, path)
+    return path
 
 
 class ConfigWatcher:

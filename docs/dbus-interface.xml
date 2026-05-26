@@ -53,6 +53,17 @@
     <!-- Очистить всю историю (память + БД). -->
     <method name="Clear"/>
 
+    <!-- Текущий конфиг демона как JSON-объект (все ключи config.toml). -->
+    <method name="GetConfig">
+      <arg name="json" type="s" direction="out"/>
+    </method>
+
+    <!-- Записать конфиг (из prefs.js). json — объект с подмножеством ключей config.toml.
+         Демон валидирует, сохраняет в config.toml и применяет на лету. -->
+    <method name="SetConfig">
+      <arg name="json" type="s" direction="in"/>
+    </method>
+
     <!-- Эмитится при любой мутации истории; открытый popup перечитывает GetHistory. -->
     <signal name="HistoryChanged"/>
 

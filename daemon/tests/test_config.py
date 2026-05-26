@@ -5,9 +5,12 @@ import pytest
 from klippad.config import (
     Config,
     ConfigError,
+    dump_toml,
     ensure_config_file,
+    from_dict,
     load_config,
     parse_config,
+    save_config,
 )
 
 
@@ -90,3 +93,65 @@ def test_ensure_config_file_idempotent(tmp_path):
     p.write_text("max_entries = 3\n", encoding="utf-8")
     ensure_config_file(p)  # не должен перезаписать существующий
     assert load_config(p).max_entries == 3
+
+
+# --- from_dict (путь D-Bus SetConfig) ------------------------------------------
+
+
+def test_from_dict_overrides_and_clamps():
+    c = from_dict({"max_entries": 0, "auto_paste": False, "future": "x"})
+    assert c.max_entries == 1  # clamp
+    assert c.auto_paste is False
+    assert c.hotkey == "<Super>v"  # не задан — дефолт
+
+
+def test_from_dict_wrong_type_raises():
+    with pytest.raises(ConfigError):
+        from_dict({"capture_images": 1})  # int вместо bool
+    with pytest.raises(ConfigError):
+        from_dict({"max_entries": True})  # bool не сходит за int
+
+
+# --- dump_toml / save_config (запись из prefs.js) ------------------------------
+
+
+def test_dump_toml_roundtrips_defaults():
+    cfg = Config()
+    assert parse_config(dump_toml(cfg)) == cfg
+
+
+def test_dump_toml_roundtrips_custom():
+    cfg = Config(
+        hotkey="<Ctrl><Alt>v",
+        max_entries=7,
+        capture_images=False,
+        max_image_mb=3,
+        auto_paste=False,
+        skip_secrets=False,
+        expire_days=30,
+    )
+    assert parse_config(dump_toml(cfg)) == cfg
+
+
+def test_dump_toml_escapes_hotkey_with_quotes():
+    # экзотика, но строка не должна ломать TOML
+    cfg = Config(hotkey='<Ctrl>"')
+    assert parse_config(dump_toml(cfg)).hotkey == '<Ctrl>"'
+
+
+def test_save_config_atomic_perms_and_roundtrip(tmp_path):
+    p = tmp_path / "sub" / "config.toml"
+    cfg = Config(max_entries=11, auto_paste=False)
+    returned = save_config(cfg, p)
+    assert returned == p
+    assert p.exists()
+    assert not (tmp_path / "sub" / "config.toml.tmp").exists()  # temp убран
+    assert (p.stat().st_mode & 0o777) == 0o600
+    assert load_config(p) == cfg
+
+
+def test_save_config_overwrites(tmp_path):
+    p = tmp_path / "config.toml"
+    save_config(Config(max_entries=5), p)
+    save_config(Config(max_entries=9), p)
+    assert load_config(p).max_entries == 9

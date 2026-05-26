@@ -7,6 +7,8 @@
 from __future__ import annotations
 
 import json
+import os
+from pathlib import Path
 
 import gi
 
@@ -15,7 +17,7 @@ gi.require_version("GLib", "2.0")
 from gi.repository import Gio, GLib  # noqa: E402
 
 from . import thumbs
-from .config import Config
+from .config import Config, ConfigError, as_dict, from_dict, save_config
 from .db import Database
 from .store import IMAGE, TEXT, Store
 
@@ -26,6 +28,33 @@ IFACE = "org.klippa.Daemon1"
 # Расширение хранит хоткей в этой схеме (DMN-010 синхронизирует сюда из конфига).
 EXT_SCHEMA = "org.gnome.shell.extensions.klippa"
 EXT_HOTKEY_KEY = "hotkey"
+EXT_UUID = "klippa@local"
+
+
+def _ext_settings() -> "Gio.Settings | None":
+    """Gio.Settings схемы расширения или None, если расширение не установлено.
+
+    Схема лежит в каталоге расширения (~/.local/share/gnome-shell/extensions/
+    klippa@local/schemas), а не в системном пути GSettings — демон-сервис не
+    находит её через get_default(). Поэтому грузим явным SchemaSource из каталога
+    расширения. Значения всё равно живут в dconf по фиксированному path схемы,
+    так что расширение и демон делят одно хранилище.
+    """
+    base = os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share")
+    schema_dir = os.path.join(base, "gnome-shell", "extensions", EXT_UUID, "schemas")
+    if not os.path.isdir(schema_dir):
+        return None
+    try:
+        src = Gio.SettingsSchemaSource.new_from_directory(
+            schema_dir, Gio.SettingsSchemaSource.get_default(), False
+        )
+        schema = src.lookup(EXT_SCHEMA, True)
+    except GLib.Error:
+        return None
+    if schema is None:
+        return None
+    return Gio.Settings.new_full(schema, None, None)
+
 
 # Жёсткий потолок на размер текстовой записи (защита от мусора в истории).
 MAX_TEXT_BYTES = 1024 * 1024
@@ -57,6 +86,8 @@ _INTERFACE_XML = """
     <method name="Promote"><arg name="id" type="t" direction="in"/></method>
     <method name="Delete"><arg name="id" type="t" direction="in"/></method>
     <method name="Clear"/>
+    <method name="GetConfig"><arg name="json" type="s" direction="out"/></method>
+    <method name="SetConfig"><arg name="json" type="s" direction="in"/></method>
     <signal name="HistoryChanged"/>
   </interface>
 </node>
@@ -78,24 +109,27 @@ def push_settings_to_extension(cfg: Config) -> bool:
     if not accel:
         print("klippad: пустой hotkey — не синхронизирую", flush=True)
         return False
-    source = Gio.SettingsSchemaSource.get_default()
-    if source is None or source.lookup(EXT_SCHEMA, True) is None:
+    settings = _ext_settings()
+    if settings is None:
         # расширение ещё не установлено — нормально на раннем этапе
         return False
-    settings = Gio.Settings.new(EXT_SCHEMA)
     settings.set_strv(EXT_HOTKEY_KEY, [accel])
     settings.set_int("popup-limit", cfg.max_entries)
     settings.set_boolean("auto-paste", cfg.auto_paste)
+    Gio.Settings.sync()
     return True
 
 
 class Daemon:
     """Владеет историей и публикует её по D-Bus."""
 
-    def __init__(self, config: Config, store: Store, db: Database) -> None:
+    def __init__(
+        self, config: Config, store: Store, db: Database, config_path: Path
+    ) -> None:
         self._cfg = config
         self._store = store
         self._db = db
+        self._config_path = config_path
         self._thumbs: dict[int, bytes] = {}  # id → PNG-миниатюра (память)
         self._conn: Gio.DBusConnection | None = None
         self._owner_id = 0
@@ -245,6 +279,27 @@ class Daemon:
         self._thumbs.clear()
         self._db.clear()
         self._emit_changed()
+        invocation.return_value(None)
+
+    def _m_GetConfig(self, _params, invocation) -> None:
+        payload = json.dumps(as_dict(self._cfg), ensure_ascii=False)
+        invocation.return_value(GLib.Variant("(s)", (payload,)))
+
+    def _m_SetConfig(self, params, invocation) -> None:
+        """Принять новый конфиг от prefs.js: валидировать, сохранить, применить.
+
+        config.toml — источник истины, поэтому пишем именно его. Применяем сразу
+        (apply_config), не полагаясь на ConfigWatcher: атомарный rename меняет inode
+        и монитор свою же запись может пропустить.
+        """
+        (payload,) = params.unpack()
+        try:
+            cfg = from_dict(json.loads(payload))
+        except (ConfigError, ValueError) as exc:
+            invocation.return_dbus_error(f"{IFACE}.Error.BadConfig", str(exc))
+            return
+        save_config(cfg, self._config_path)
+        self.apply_config(cfg)
         invocation.return_value(None)
 
     # --- авто-истечение (DMN-012) ------------------------------------------

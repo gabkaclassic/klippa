@@ -35,6 +35,8 @@ const IFACE_XML = `
     <method name="Promote"><arg name="id" type="t" direction="in"/></method>
     <method name="Delete"><arg name="id" type="t" direction="in"/></method>
     <method name="Clear"/>
+    <method name="GetConfig"><arg name="json" type="s" direction="out"/></method>
+    <method name="SetConfig"><arg name="json" type="s" direction="in"/></method>
     <signal name="HistoryChanged"/>
   </interface>
 </node>`;

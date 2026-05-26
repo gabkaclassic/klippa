@@ -40,7 +40,7 @@ def main() -> int:
     store.load(db.load())
     db.sync(store.list())  # согласовать БД, если загрузка что-то вытеснила
 
-    daemon = Daemon(cfg, store, db)
+    daemon = Daemon(cfg, store, db, cfg_path)
     push_settings_to_extension(cfg)  # best-effort: расширение может быть ещё не установлено
     daemon.start()
 
