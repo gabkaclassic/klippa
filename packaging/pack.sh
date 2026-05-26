@@ -10,28 +10,31 @@ UUID="klippa@local"
 EXT_SRC="$REPO_ROOT/extension/$UUID"
 DIST="$REPO_ROOT/dist"
 
-if ! command -v gnome-extensions >/dev/null 2>&1; then
-  echo "!! нет gnome-extensions (пакет gnome-shell). Установить нечем — прерываю." >&2
+mkdir -p "$DIST"
+ZIP="$DIST/$UUID.shell-extension.zip"
+
+if command -v gnome-extensions >/dev/null 2>&1; then
+  # Штатный путь. gnome-extensions pack сам включает metadata.json, extension.js,
+  # prefs.js, stylesheet.css и schemas/. Прочие JS-модули — явно --extra-source.
+  EXTRA=(dbus.js clipboard.js popup.js)
+  extra_args=()
+  for f in "${EXTRA[@]}"; do
+    [ -f "$EXT_SRC/$f" ] && extra_args+=(--extra-source="$f")
+  done
+  echo "==> Сборка через gnome-extensions pack"
+  gnome-extensions pack "$EXT_SRC" --force --out-dir="$DIST" "${extra_args[@]}"
+elif command -v zip >/dev/null 2>&1; then
+  # Переносимый фолбэк (например, в CI без gnome-shell). Бандл — это zip файлов
+  # расширения в корне архива; схему .gschema.xml компилирует сам
+  # gnome-extensions install на целевой машине, поэтому компилировать здесь не нужно.
+  echo "==> Сборка через zip (gnome-extensions недоступен)"
+  rm -f "$ZIP"
+  ( cd "$EXT_SRC" && zip -q -r "$ZIP" \
+      metadata.json stylesheet.css ./*.js schemas/*.gschema.xml )
+else
+  echo "!! нет ни gnome-extensions, ни zip — собрать бандл нечем." >&2
   exit 1
 fi
-
-mkdir -p "$DIST"
-
-# gnome-extensions pack сам включает metadata.json, extension.js, prefs.js,
-# stylesheet.css и schemas/. Остальные JS-модули добавляем явно --extra-source.
-EXTRA=(dbus.js clipboard.js popup.js)
-extra_args=()
-for f in "${EXTRA[@]}"; do
-  [ -f "$EXT_SRC/$f" ] && extra_args+=(--extra-source="$f")
-done
-
-echo "==> Сборка zip из $EXT_SRC"
-gnome-extensions pack "$EXT_SRC" \
-  --force \
-  --out-dir="$DIST" \
-  "${extra_args[@]}"
-
-ZIP="$DIST/$UUID.shell-extension.zip"
 echo "==> Готово: $ZIP"
 echo "    содержимое:"
 unzip -l "$ZIP" | sed 's/^/      /'
