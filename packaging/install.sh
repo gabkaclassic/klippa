@@ -69,8 +69,30 @@ systemctl --user enable --now klippad.service
 echo "    демон: $(systemctl --user is-active klippad.service)"
 
 echo "==> Включение расширения"
-gnome-extensions enable "$UUID" || \
-  echo "    (расширение включится после перезахода — это нормально на Wayland)"
+# На Wayland `gnome-extensions enable` срабатывает вхолостую, пока запущенный shell
+# не знает о только что скопированном расширении: uuid не попадает в GSettings и
+# после перелогина расширение остаётся выключенным (State: INITIALIZED). Поэтому
+# дописываем uuid в enabled-extensions напрямую — идемпотентно, через Gio тем же
+# интерпретатором, у которого гарантированно есть gi. Shell включит его при входе.
+"$DAEMON_PYTHON" - "$UUID" <<'PY'
+import sys
+from gi.repository import Gio
+uuid = sys.argv[1]
+s = Gio.Settings.new("org.gnome.shell")
+lst = list(s.get_strv("enabled-extensions"))
+if uuid not in lst:
+    lst.append(uuid)
+    s.set_strv("enabled-extensions", lst)
+    Gio.Settings.sync()
+    print(f"    {uuid} добавлен в enabled-extensions")
+else:
+    print(f"    {uuid} уже включён в enabled-extensions")
+PY
+# Если shell уже знает расширение (повторная установка после перезахода) — включаем
+# и в текущей сессии, без ожидания перелогина.
+gnome-extensions enable "$UUID" 2>/dev/null \
+  && echo "    активно в текущей сессии" \
+  || echo "    активируется после перезахода (это нормально на Wayland)"
 
 cat <<'EOF'
 
