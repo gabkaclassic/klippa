@@ -29,3 +29,5 @@ extension/klippa@local/schemas/gschemas.compiled
 .vscode/
 *.swp
 .DS_Store
+venv
+.venv
