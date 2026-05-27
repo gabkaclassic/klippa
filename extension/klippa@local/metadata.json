@@ -2,8 +2,10 @@
   "uuid": "klippa@local",
   "name": "klippa",
   "description": "Менеджер буфера обмена: захват текста и изображений, всплывающее меню у курсора, навигация с клавиатуры. Логику, хранение и шифрование держит демон klippad (D-Bus org.klippa.Daemon).",
-  "shell-version": ["50"],
+  "shell-version": [
+    "50"
+  ],
   "settings-schema": "org.gnome.shell.extensions.klippa",
-  "version": 1,
+  "version": 2,
   "url": "local"
 }
