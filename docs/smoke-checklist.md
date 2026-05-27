@@ -36,6 +36,9 @@ busctl --user call org.klippa.Daemon /org/klippa/Daemon \
 - [ ] **Вызов меню у курсора.** Нажмите хоткей (по умолчанию `<Super>v`) → popup
       открывается рядом с курсором, не уезжая за край экрана.
 - [ ] **Навигация клавиатурой.** Стрелки ↑/↓ двигают выделение; мышь не нужна.
+- [ ] **Навигация мышью.** Наведение на строку подсвечивает её; клик по строке —
+      выбор и вставка (как Enter).
+- [ ] **Клик вне меню.** Щелчок мимо popup закрывает его без выбора.
 - [ ] **Фильтр.** Начните печатать → список сужается по подстроке; Backspace
       возвращает; в подсказке виден текущий запрос.
 - [ ] **Миниатюры.** Для записей-картинок в меню видна миниатюра.
@@ -66,6 +69,28 @@ busctl --user call org.klippa.Daemon /org/klippa/Daemon \
       org.klippa.Daemon1 Clear` → история пуста и остаётся пустой после рестарта.
 - [ ] **Безопасность на диске.** `strings ~/.local/share/klippa/history.db | grep -i
       <ваш-текст>` → искомое **не** находится (зашифровано). Права файла — `0600`.
+
+## deb-установка (опционально)
+
+Проверять, только если ставите через `.deb` вместо `install.sh`.
+
+- [ ] **Сборка.** `NFPM=… ./packaging/build-deb.sh` → `dist/klippa_<version>_all.deb`;
+      `dpkg-deb -I` показывает верные `Depends` и `Architecture: all`.
+- [ ] **Установка.** `sudo apt install ./dist/klippa_<version>_all.deb` → apt
+      доустанавливает `python3-gi`/`cryptography`/типелибы; файлы появляются в
+      `/usr/share/klippa`, `/usr/share/gnome-shell/extensions/klippa@local`,
+      `/usr/lib/systemd/user/klippad.service`, `/usr/bin/klippa-{enable,disable,config}`.
+- [ ] **Активация.** `klippa-enable` от своего юзера → сервис `active`, расширение
+      в `enabled-extensions`; после перелогина `gnome-extensions info klippa@local`
+      → `ACTIVE`, Super+V открывает popup.
+- [ ] **Настройки.** `klippa-config` → открывается окно настроек расширения.
+- [ ] **Отключение.** `klippa-disable` → сервис `inactive`, расширение убрано из
+      `enabled-extensions`; после перелогина popup по Super+V не появляется.
+      Повторный `klippa-enable` возвращает работу.
+- [ ] **Зеркалирование при системной установке.** Смена хоткея из GUI/конфига
+      применяется (демон находит схему в `/usr/share`, а не только в `~/.local/share`).
+- [ ] **Удаление.** `sudo apt remove klippa` → файлы пакета и `gschemas.compiled`
+      удалены; `~/.config/klippa` и `~/.local/share/klippa` (данные) сохранены.
 
 ## Если что-то не так
 
