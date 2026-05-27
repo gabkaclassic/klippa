@@ -1,0 +1,61 @@
+# nfpm-спека deb-пакета klippa. Собирается через packaging/build-deb.sh,
+# который подставляет ${KLIPPA_VERSION} из daemon/klippad/__init__.py и
+# запускает nfpm из корня репозитория (пути ниже — относительно него).
+# Док: https://nfpm.goreleaser.com/configuration/
+name: klippa
+arch: all            # чистый Python + JS, без бинарей → Architecture: all
+platform: linux
+version: ${KLIPPA_VERSION}
+section: utils
+priority: optional
+maintainer: klippa maintainer <kuzminrd44@gmail.com>
+homepage: https://github.com/gabkaclassic/klippa
+description: |
+  Минималистичный менеджер буфера обмена для GNOME Shell (Wayland).
+  Тонкое расширение GNOME + Python-демон klippad: захват текста и
+  изображений, всплывающее меню у курсора, шифрованная история.
+
+# apt сам подтянет рантайм-зависимости демона (раньше install.sh их только
+# проверял). Версии shell-расширения не пакетируем — оно грузится из /usr/share.
+depends:
+  - python3
+  - python3-gi
+  - python3-cryptography
+  - gir1.2-glib-2.0
+  - gir1.2-gdkpixbuf-2.0
+  - gir1.2-secret-1
+  - gnome-shell
+
+recommends:
+  - gnome-shell-extension-prefs   # GUI настроек расширения (prefs.js)
+
+contents:
+  # Код демона — системно; юнит указывает PYTHONPATH=/usr/share/klippa.
+  - src: daemon/klippad
+    dst: /usr/share/klippa/klippad
+
+  # Расширение GNOME — в системный каталог расширений (shell грузит и оттуда).
+  - src: extension/klippa@local
+    dst: /usr/share/gnome-shell/extensions/klippa@local
+
+  # systemd --user юнит (deb-вариант с фиксированным PYTHONPATH).
+  - src: packaging/deb/klippad.service
+    dst: /usr/lib/systemd/user/klippad.service
+
+  # Per-user управление (в сессии пользователя): включить / отключить / настройки.
+  - src: packaging/deb/klippa-enable
+    dst: /usr/bin/klippa-enable
+    file_info:
+      mode: 0755
+  - src: packaging/deb/klippa-disable
+    dst: /usr/bin/klippa-disable
+    file_info:
+      mode: 0755
+  - src: packaging/deb/klippa-config
+    dst: /usr/bin/klippa-config
+    file_info:
+      mode: 0755
+
+scripts:
+  postinstall: packaging/deb/postinstall.sh
+  postremove: packaging/deb/postremove.sh

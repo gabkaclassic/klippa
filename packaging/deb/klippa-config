@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# Открыть GUI настроек klippa — обёртка над `gnome-extensions prefs klippa@local`
+# (страница prefs.js: хоткей, лимит истории, авто-вставка и т.д.).
+set -euo pipefail
+
+UUID="klippa@local"
+
+if ! command -v gnome-extensions >/dev/null 2>&1; then
+  echo "!! gnome-extensions не найден (нужен GNOME Shell)." >&2
+  exit 1
+fi
+
+exec gnome-extensions prefs "$UUID"

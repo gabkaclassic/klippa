@@ -5,21 +5,38 @@ on:
     types: [created]
 
 permissions:
-  contents: write   # нужно для прикрепления ассета к релизу
+  contents: write   # нужно для прикрепления ассетов к релизу
+
+env:
+  NFPM_VERSION: "2.46.3"   # пин для воспроизводимости; bump вручную
 
 jobs:
   pack:
-    name: zip-бандл расширения
+    name: zip-бандл + deb-пакет
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       # gnome-extensions недоступен на runner — pack.sh соберёт бандл через zip.
-      - name: Сборка бандла
+      - name: Сборка zip-бандла расширения
         run: ./packaging/pack.sh
 
-      - name: Прикрепить zip к релизу
+      # Prebuilt-бинарь nfpm (надёжнее go install — не зависит от версии Go).
+      - name: Установка nfpm
+        run: |
+          curl -fsSL -o /tmp/nfpm.tar.gz \
+            "https://github.com/goreleaser/nfpm/releases/download/v${NFPM_VERSION}/nfpm_${NFPM_VERSION}_Linux_x86_64.tar.gz"
+          tar -xzf /tmp/nfpm.tar.gz -C /tmp nfpm
+
+      - name: Сборка deb-пакета
+        run: NFPM=/tmp/nfpm ./packaging/build-deb.sh
+
+      - name: Прикрепить ассеты к релизу
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.event.release.tag_name }}
-        run: gh release upload "$TAG" dist/klippa@local.shell-extension.zip --clobber
+        run: |
+          gh release upload "$TAG" \
+            dist/klippa@local.shell-extension.zip \
+            dist/klippa_*_all.deb \
+            --clobber

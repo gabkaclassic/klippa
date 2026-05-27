@@ -1,0 +1,19 @@
+[Unit]
+Description=klippa clipboard manager daemon
+Documentation=https://local/klippa
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+# deb-вариант: код демона лежит системно в /usr/share/klippa/klippad
+# (в отличие от install.sh, который ставит его per-user в ~/.local/share).
+Environment=PYTHONPATH=/usr/share/klippa
+ExecStart=/usr/bin/python3 -m klippad
+Restart=on-failure
+RestartSec=2
+# Базовая изоляция: демон не нуждается в новых привилегиях.
+NoNewPrivileges=true
+
+[Install]
+WantedBy=graphical-session.target

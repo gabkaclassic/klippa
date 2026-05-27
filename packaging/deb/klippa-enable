@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+# Per-user активация klippa после установки deb-пакета.
+# deb кладёт файлы системно (от root), но GNOME-расширение и systemd --user
+# сервис включаются только в сессии конкретного пользователя — это и делает
+# данный скрипт. Идемпотентен: повторный запуск безопасен.
+set -euo pipefail
+
+UUID="klippa@local"
+
+if [ "$(id -u)" -eq 0 ]; then
+  echo "!! Запускайте klippa-enable от своего пользователя, а не от root." >&2
+  exit 1
+fi
+
+echo "==> Включаю пользовательский сервис klippad"
+systemctl --user daemon-reload
+systemctl --user enable --now klippad.service
+echo "    демон: $(systemctl --user is-active klippad.service)"
+
+echo "==> Включаю расширение GNOME"
+# На Wayland `gnome-extensions enable` срабатывает вхолостую, пока запущенный
+# shell не знает о расширении, поэтому дописываем uuid в enabled-extensions
+# напрямую (shell включит при следующем входе). python3-gi гарантирован
+# зависимостью пакета.
+python3 - "$UUID" <<'PY'
+import sys
+from gi.repository import Gio
+uuid = sys.argv[1]
+s = Gio.Settings.new("org.gnome.shell")
+lst = list(s.get_strv("enabled-extensions"))
+if uuid not in lst:
+    lst.append(uuid)
+    s.set_strv("enabled-extensions", lst)
+    Gio.Settings.sync()
+    print(f"    {uuid} добавлен в enabled-extensions")
+else:
+    print(f"    {uuid} уже включён в enabled-extensions")
+PY
+gnome-extensions enable "$UUID" 2>/dev/null \
+  && echo "    активно в текущей сессии" \
+  || echo "    активируется после перезахода (это нормально на Wayland)"
+
+cat <<'EOF'
+
+==> Готово. На Wayland gnome-shell нельзя перезагрузить без перелогина:
+    выйдите из сессии и войдите снова, затем проверьте:
+      gnome-extensions info klippa@local
+      systemctl --user status klippad
+    Конфиг: ~/.config/klippa/config.toml (создаётся при первом старте демона).
+EOF
