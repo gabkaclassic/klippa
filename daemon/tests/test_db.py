@@ -1,7 +1,9 @@
 """Тесты персистентности: шифрованная БД, восстановление порядка, права, очистка."""
 
+import pytest
+
 from klippad.crypto import Cipher, generate_key
-from klippad.db import Database
+from klippad.db import Database, HistoryUnreadable
 from klippad.store import IMAGE, TEXT, Store
 
 
@@ -83,6 +85,50 @@ def test_sync_deletes_removed_entries(tmp_path):
 
     db2 = Database(tmp_path / "h.db", _fixed_cipher())
     assert sorted(e.preview for e in db2.load()) == ["a", "c"]
+    db2.close()
+
+
+def test_load_skips_undecryptable_rows_but_keeps_readable(tmp_path):
+    # БД с двумя записями под одним ключом; затем портим одну строку так, что
+    # она не расшифруется, а вторая останется читаемой.
+    key = b"k" * 32
+    db = Database(tmp_path / "h.db", Cipher(key))
+    db.sync(_store_with(["good", "doomed"]).list())  # MRU: doomed, good
+    # сломать blob первой записи (pos=0 → doomed): подменить на мусор
+    db._conn.execute("UPDATE entries SET data = ? WHERE pos = 0", (b"garbage-not-gcm",))
+    db._conn.commit()
+    db.close()
+
+    db2 = Database(tmp_path / "h.db", Cipher(key))
+    loaded = db2.load()
+    assert [e.preview for e in loaded] == ["good"]  # битая пропущена, читаемая цела
+    db2.close()
+
+
+def test_load_raises_when_nothing_decrypts(tmp_path):
+    # Записан одним ключом, читается другим — расшифровать нечего.
+    db = Database(tmp_path / "h.db", Cipher(b"a" * 32))
+    db.sync(_store_with(["x", "y"]).list())
+    db.close()
+
+    db2 = Database(tmp_path / "h.db", Cipher(b"b" * 32))
+    with pytest.raises(HistoryUnreadable):
+        db2.load()
+    db2.close()
+
+
+def test_quarantine_moves_file_and_opens_empty(tmp_path):
+    p = tmp_path / "h.db"
+    db = Database(p, Cipher(b"a" * 32))
+    db.sync(_store_with(["x", "y"]).list())
+    db.close()
+
+    db2 = Database(p, Cipher(b"b" * 32))
+    backup = db2.quarantine()
+    assert backup.exists() and backup != p     # старый файл сохранён рядом
+    assert backup.read_bytes()                 # непустой бэкап
+    assert db2.load() == []                     # новая БД пуста и читается
+    assert (p.stat().st_mode & 0o777) == 0o600  # права сохранены
     db2.close()
 
 

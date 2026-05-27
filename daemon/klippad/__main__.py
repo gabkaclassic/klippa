@@ -17,7 +17,7 @@ from gi.repository import GLib  # noqa: E402
 
 from .config import ConfigWatcher, default_config_path, ensure_config_file, load_config
 from .crypto import make_cipher_from_keyring
-from .db import Database, default_db_path
+from .db import Database, HistoryUnreadable, default_db_path
 from .service import Daemon, push_settings_to_extension
 from .store import Store
 
@@ -37,7 +37,15 @@ def main() -> int:
 
     db = Database(default_db_path(), cipher)
     store = Store(max_entries=cfg.max_entries)
-    store.load(db.load())
+    try:
+        store.load(db.load())
+    except HistoryUnreadable as exc:
+        backup = db.quarantine()
+        print(
+            f"klippad: {exc}; файл отложен в {backup}, стартую с пустой историей",
+            file=sys.stderr,
+            flush=True,
+        )
     db.sync(store.list())  # согласовать БД, если загрузка что-то вытеснила
 
     daemon = Daemon(cfg, store, db, cfg_path)
