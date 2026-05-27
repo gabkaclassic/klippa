@@ -31,29 +31,41 @@ EXT_HOTKEY_KEY = "hotkey"
 EXT_UUID = "klippa@local"
 
 
+def _ext_data_dirs() -> list[str]:
+    """Каталоги данных XDG: сначала пользовательский, затем системные.
+
+    Расширение может стоять per-user (install.sh → ~/.local/share) или
+    системно из deb-пакета (/usr/share). Схему ищем в обоих, пользовательский
+    приоритетнее. XDG_DATA_DIRS по умолчанию — /usr/local/share:/usr/share.
+    """
+    home = os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share")
+    system = os.environ.get("XDG_DATA_DIRS") or "/usr/local/share:/usr/share"
+    return [home, *(d for d in system.split(":") if d)]
+
+
 def _ext_settings() -> "Gio.Settings | None":
     """Gio.Settings схемы расширения или None, если расширение не установлено.
 
-    Схема лежит в каталоге расширения (~/.local/share/gnome-shell/extensions/
-    klippa@local/schemas), а не в системном пути GSettings — демон-сервис не
-    находит её через get_default(). Поэтому грузим явным SchemaSource из каталога
-    расширения. Значения всё равно живут в dconf по фиксированному path схемы,
-    так что расширение и демон делят одно хранилище.
+    Схема лежит в каталоге расширения (.../gnome-shell/extensions/klippa@local/
+    schemas), а не в системном пути GSettings — демон-сервис не находит её через
+    get_default(). Поэтому грузим явным SchemaSource из каталога расширения,
+    перебирая XDG-пути (per-user и системный deb). Значения всё равно живут в
+    dconf по фиксированному path схемы, так что расширение и демон делят хранилище.
     """
-    base = os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share")
-    schema_dir = os.path.join(base, "gnome-shell", "extensions", EXT_UUID, "schemas")
-    if not os.path.isdir(schema_dir):
-        return None
-    try:
-        src = Gio.SettingsSchemaSource.new_from_directory(
-            schema_dir, Gio.SettingsSchemaSource.get_default(), False
-        )
-        schema = src.lookup(EXT_SCHEMA, True)
-    except GLib.Error:
-        return None
-    if schema is None:
-        return None
-    return Gio.Settings.new_full(schema, None, None)
+    for base in _ext_data_dirs():
+        schema_dir = os.path.join(base, "gnome-shell", "extensions", EXT_UUID, "schemas")
+        if not os.path.isdir(schema_dir):
+            continue
+        try:
+            src = Gio.SettingsSchemaSource.new_from_directory(
+                schema_dir, Gio.SettingsSchemaSource.get_default(), False
+            )
+            schema = src.lookup(EXT_SCHEMA, True)
+        except GLib.Error:
+            continue
+        if schema is not None:
+            return Gio.Settings.new_full(schema, None, None)
+    return None
 
 
 # Жёсткий потолок на размер текстовой записи (защита от мусора в истории).

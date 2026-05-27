@@ -50,6 +50,7 @@ export class KlippaPopup {
         this._grab = null;
         this._isOpen = false;
         this._prevFocus = null;
+        this._virtualKeyboard = null;   // создаётся лениво, переиспользуется
         this._entries = [];        // полная история (meta)
         this._filtered = [];       // после фильтра
         this._rows = [];           // актёры строк, соответствуют _filtered
@@ -105,6 +106,7 @@ export class KlippaPopup {
 
     destroy() {
         this.close();
+        this._virtualKeyboard = null;
         this._client = null;
         this._settings = null;
     }
@@ -119,6 +121,8 @@ export class KlippaPopup {
             can_focus: true,
         });
         this._actor.connect('key-press-event', this._onKeyPress.bind(this));
+        // клик вне popup закрывает (модальный grab доставляет события сюда первым)
+        this._actor.connect('captured-event', this._onCapturedEvent.bind(this));
 
         this._hintLabel = new St.Label({style_class: 'klippa-hint'});
         this._actor.add_child(this._hintLabel);
@@ -178,7 +182,7 @@ export class KlippaPopup {
 
         this._hintLabel.text = this._query
             ? `Поиск: ${this._query}`
-            : 'Стрелки — выбор · Enter — вставить · Del — удалить · Esc — выход';
+            : 'Стрелки/мышь — выбор · Enter/клик — вставить · Del — удалить · Esc — выход';
 
         if (this._filtered.length === 0) {
             const empty = new St.Label({
@@ -190,7 +194,25 @@ export class KlippaPopup {
         }
 
         this._filtered.forEach((entry, i) => {
-            const row = new St.BoxLayout({style_class: 'klippa-row', vertical: false});
+            const row = new St.BoxLayout({
+                style_class: 'klippa-row',
+                vertical: false,
+                reactive: true,
+                track_hover: true,
+            });
+            // наведение мышью подсвечивает строку (синхронно с клавиатурой)
+            row.connect('notify::hover', () => {
+                if (row.hover && this._selected !== i) {
+                    this._selected = i;
+                    this._updateSelection();
+                }
+            });
+            // клик по строке — выбрать и вставить (как Enter)
+            row.connect('button-release-event', () => {
+                this._selected = i;
+                this._activate();
+                return Clutter.EVENT_STOP;
+            });
             row.add_child(new St.Label({
                 style_class: 'klippa-index',
                 text: `${i + 1}`,
@@ -232,6 +254,22 @@ export class KlippaPopup {
     }
 
     // --- клавиатура ---------------------------------------------------------
+
+    _onCapturedEvent(_actor, event) {
+        // Закрыть при нажатии мыши/тача вне области popup. Внутри (по строке или
+        // фону) — пропускаем, чтобы сработали обработчики строк. Паттерн взят из
+        // PopupMenuManager штатного Shell (global.stage.get_event_actor + contains).
+        const type = event.type();
+        if (type === Clutter.EventType.BUTTON_PRESS ||
+            type === Clutter.EventType.TOUCH_BEGIN) {
+            const target = global.stage.get_event_actor(event);
+            if (this._actor && !this._actor.contains(target)) {
+                this.close();
+                return Clutter.EVENT_STOP;
+            }
+        }
+        return Clutter.EVENT_PROPAGATE;
+    }
 
     _onKeyPress(_actor, event) {
         const symbol = event.get_key_symbol();
@@ -326,10 +364,17 @@ export class KlippaPopup {
         // фокус уже вернулся прежнему окну после popModal; синтезируем Ctrl+V
         GLib.timeout_add(GLib.PRIORITY_DEFAULT, PASTE_DELAY_MS, () => {
             try {
-                const seat = Clutter.get_default_backend().get_default_seat();
-                const vk = seat.create_virtual_device(
-                    Clutter.InputDeviceType.KEYBOARD_DEVICE);
-                const t = Clutter.get_current_event_time();
+                if (!this._virtualKeyboard) {
+                    const seat = Clutter.get_default_backend().get_default_seat();
+                    this._virtualKeyboard = seat.create_virtual_device(
+                        Clutter.InputDeviceType.KEYBOARD_DEVICE);
+                }
+                const vk = this._virtualKeyboard;
+                // notify_keyval ждёт МИКРОсекунды (как keyboard.js самого Shell),
+                // а get_current_event_time() — миллисекунды. Без ×1000 таймстамп
+                // оказывается «в прошлом», и компоситор отбрасывает синтезированные
+                // нажатия — буфер ставится, но Ctrl+V не доходит до окна.
+                const t = Clutter.get_current_event_time() * 1000;
                 vk.notify_keyval(t, Clutter.KEY_Control_L, Clutter.KeyState.PRESSED);
                 vk.notify_keyval(t, Clutter.KEY_v, Clutter.KeyState.PRESSED);
                 vk.notify_keyval(t, Clutter.KEY_v, Clutter.KeyState.RELEASED);

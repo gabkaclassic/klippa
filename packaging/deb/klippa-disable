@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+# Per-user деактивация klippa: отключает расширение и останавливает сервис.
+# Файлы пакета и пользовательские данные не трогает. Обратно — klippa-enable;
+# полностью удалить пакет — sudo apt remove klippa. Идемпотентен.
+set -euo pipefail
+
+UUID="klippa@local"
+
+if [ "$(id -u)" -eq 0 ]; then
+  echo "!! Запускайте klippa-disable от своего пользователя, а не от root." >&2
+  exit 1
+fi
+
+echo "==> Отключаю расширение GNOME"
+gnome-extensions disable "$UUID" 2>/dev/null || true
+# Убираем uuid из enabled-extensions, чтобы оно осталось выключенным и после входа.
+python3 - "$UUID" <<'PY'
+import sys
+from gi.repository import Gio
+uuid = sys.argv[1]
+s = Gio.Settings.new("org.gnome.shell")
+lst = list(s.get_strv("enabled-extensions"))
+if uuid in lst:
+    s.set_strv("enabled-extensions", [u for u in lst if u != uuid])
+    Gio.Settings.sync()
+    print(f"    {uuid} убран из enabled-extensions")
+else:
+    print(f"    {uuid} уже не в enabled-extensions")
+PY
+
+echo "==> Останавливаю пользовательский сервис klippad"
+systemctl --user disable --now klippad.service 2>/dev/null || true
+echo "    демон: $(systemctl --user is-active klippad.service 2>/dev/null || echo inactive)"
+
+cat <<'EOF'
+
+==> klippa отключена для текущего пользователя.
+    Снова включить:          klippa-enable
+    Полностью удалить пакет:  sudo apt remove klippa
+EOF

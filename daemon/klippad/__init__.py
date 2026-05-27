@@ -6,4 +6,4 @@ D-Bus-сервис (service). Слой gi изолирован в service/thumbs
 чтобы ядро (store/config/crypto/db) покрывалось unit-тестами.
 """
 
-__version__ = "0.1.0"
+__version__ = "0.1.3"

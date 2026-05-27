@@ -13,12 +13,23 @@ from __future__ import annotations
 
 import os
 import sqlite3
+import sys
+import time
 from pathlib import Path
 
-from .crypto import Cipher
+from .crypto import Cipher, DecryptError
 from .store import IMAGE, TEXT, Entry, _text_preview
 
 APP = "klippa"
+
+
+class HistoryUnreadable(Exception):
+    """БД существует, но ни одна запись не расшифровывается текущим ключом.
+
+    Обычно — ключ в gnome-keyring не соответствует файлу истории (пересоздан,
+    другой профиль). Сигнал наверх: отложить файл и стартовать с пустой историей,
+    а не падать в краш-цикл.
+    """
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS entries (
@@ -49,14 +60,18 @@ class Database:
     def __init__(self, path: Path, cipher: Cipher) -> None:
         self._path = path
         self._cipher = cipher
-        path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        self._open()
+
+    def _open(self) -> None:
+        """Открыть (создав при необходимости) файл БД с правами 0600 и схемой."""
+        self._path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         # Файл создаём с правами 0600 ДО открытия соединения.
-        if not path.exists():
-            fd = os.open(str(path), os.O_CREAT | os.O_WRONLY, 0o600)
+        if not self._path.exists():
+            fd = os.open(str(self._path), os.O_CREAT | os.O_WRONLY, 0o600)
             os.close(fd)
         else:
-            path.chmod(0o600)
-        self._conn = sqlite3.connect(str(path))
+            self._path.chmod(0o600)
+        self._conn = sqlite3.connect(str(self._path))
         self._conn.executescript(_SCHEMA)
         self._conn.commit()
 
@@ -64,13 +79,24 @@ class Database:
         self._conn.close()
 
     def load(self) -> list[Entry]:
-        """Прочитать записи в порядке MRU (голова первой), расшифровав содержимое."""
+        """Прочитать записи в порядке MRU (голова первой), расшифровав содержимое.
+
+        Битые/нечитаемые записи пропускаются (частичная порча не должна терять всю
+        историю). Если не читается НИ ОДНА запись из непустой БД — ключ не подходит
+        ко всему файлу: поднимаем HistoryUnreadable, чтобы вызвавший отложил файл и
+        стартовал с пустой историей вместо краш-цикла.
+        """
         rows = self._conn.execute(
             "SELECT id, kind, data, source_app, ts FROM entries ORDER BY pos ASC"
         ).fetchall()
         entries: list[Entry] = []
+        failed = 0
         for entry_id, kind, blob, source_app, ts in rows:
-            data = self._cipher.decrypt(bytes(blob))
+            try:
+                data = self._cipher.decrypt(bytes(blob))
+            except DecryptError:
+                failed += 1
+                continue
             entries.append(
                 Entry(
                     id=entry_id,
@@ -81,7 +107,31 @@ class Database:
                     preview=_preview_for(kind, data),
                 )
             )
+        if failed and not entries:
+            raise HistoryUnreadable(
+                f"{failed} записей не расшифрованы текущим ключом из gnome-keyring"
+            )
+        if failed:
+            print(
+                f"klippad: пропущено {failed} нечитаемых записей из {len(rows)}",
+                file=sys.stderr,
+                flush=True,
+            )
         return entries
+
+    def quarantine(self) -> Path:
+        """Отложить нечитаемый файл БД в сторону и открыть новую пустую.
+
+        Данные не теряем (файл сохраняем с пометкой `.unreadable-<время>`), но
+        демон стартует с чистой историей. Возвращает путь к сохранённому файлу.
+        """
+        self._conn.close()
+        backup = self._path.with_name(
+            f"{self._path.name}.unreadable-{time.strftime('%Y%m%d-%H%M%S')}"
+        )
+        self._path.rename(backup)
+        self._open()
+        return backup
 
     def sync(self, entries: list[Entry]) -> None:
         """Привести БД в точное соответствие списку (entries[0] — голова)."""
