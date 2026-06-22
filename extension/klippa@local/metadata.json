@@ -6,6 +6,6 @@
     "50"
   ],
   "settings-schema": "org.gnome.shell.extensions.klippa",
-  "version": 2,
+  "version": 3,
   "url": "local"
 }

@@ -138,22 +138,32 @@ export class KlippaPopup {
 
     _positionAtPointer() {
         const [x, y] = global.get_pointer();
-        // рабочая область монитора под курсором
+        // якорь у курсора и рабочая область монитора под курсором фиксируются
+        // на время жизни popup; размеры окна меняются (асинхронная загрузка
+        // истории, фильтрация), поэтому кламп пересчитываем при каждом релейауте.
+        this._anchorX = x;
+        this._anchorY = y;
         const idx = global.display.get_current_monitor();
-        const wa = Main.layoutManager.getWorkAreaForMonitor(idx);
+        this._workArea = Main.layoutManager.getWorkAreaForMonitor(idx);
         this._actor.set_position(x, y);
-        // кламп после аллокации (размеры известны только после layout)
-        GLib.idle_add(GLib.PRIORITY_DEFAULT, () => {
-            if (!this._actor)
-                return GLib.SOURCE_REMOVE;
-            const [w, h] = this._actor.get_size();
-            let px = Math.min(x, wa.x + wa.width - w);
-            let py = Math.min(y, wa.y + wa.height - h);
-            px = Math.max(px, wa.x);
-            py = Math.max(py, wa.y);
-            this._actor.set_position(px, py);
-            return GLib.SOURCE_REMOVE;
-        });
+        this._clamp();
+        // повторный кламп после каждого изменения размера, чтобы окно с уже
+        // наполненным/отфильтрованным списком не выходило за границы экрана
+        this._actor.connect('notify::height', this._clamp.bind(this));
+        this._actor.connect('notify::width', this._clamp.bind(this));
+    }
+
+    // держит окно как можно ближе к курсору, но в пределах рабочей области
+    _clamp() {
+        if (!this._actor || !this._workArea)
+            return;
+        const wa = this._workArea;
+        const [w, h] = this._actor.get_size();
+        let px = Math.min(this._anchorX, wa.x + wa.width - w);
+        let py = Math.min(this._anchorY, wa.y + wa.height - h);
+        px = Math.max(px, wa.x);
+        py = Math.max(py, wa.y);
+        this._actor.set_position(px, py);
     }
 
     // --- данные -------------------------------------------------------------
